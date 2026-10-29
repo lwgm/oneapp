@@ -58,10 +58,10 @@ struct BookDetailView: View {
                         body: "后端只返回了 ISBN，没有书名和作者。等抓取成功后重新加载即可显示完整信息。",
                         color: Color(red: 0.70, green: 0.47, blue: 0.09)
                     )
-                } else if !book.hasBlurb && !book.hasCover {
+                } else if !book.hasBlurb {
                     noticeCard(
-                        title: "暂无简介与封面",
-                        body: "这本书的元数据里没有内容简介，服务端也没有存到封面。",
+                        title: "暂无内容简介",
+                        body: "这本书的元数据里没有简介。封面若存在仍会显示。",
                         color: Color.sub
                     )
                 }

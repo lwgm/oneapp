@@ -4,10 +4,16 @@ import UIKit
 ///
 /// 服务端对封面设置了 `Cache-Control: public, max-age=604800` 和 `ETag`，
 /// 所以这里额外加一层内存缓存：列表滚动时不会重复请求、也不会有占位闪烁。
+///
+/// 注意：`/history` 里的 `has_cover` 并不可靠 —— 实测有些记录标着 false，
+/// 但 `/cover` 依然能取到图（服务端会按 ISBN 再找一遍）。
+/// 因此调用方不应拿 `has_cover` 决定要不要请求，这里也不做这种假设。
 actor CoverImageLoader {
     static let shared = CoverImageLoader()
 
     private let memory = NSCache<NSURL, UIImage>()
+    /// 已知没有封面的 URL，避免每次滚动都重新撞一次 404。
+    private let misses = NSCache<NSURL, NSNumber>()
     private var inFlight: [URL: Task<UIImage?, Never>] = [:]
     private let session: URLSession
 
@@ -21,12 +27,20 @@ actor CoverImageLoader {
             diskPath: "cover-images"
         )
         session = URLSession(configuration: configuration)
+
         memory.countLimit = 300
+        memory.totalCostLimit = 64 * 1024 * 1024
+        misses.countLimit = 500
     }
 
     func image(for url: URL) async -> UIImage? {
-        if let cached = memory.object(forKey: url as NSURL) {
+        let key = url as NSURL
+
+        if let cached = memory.object(forKey: key) {
             return cached
+        }
+        if misses.object(forKey: key) != nil {
+            return nil
         }
 
         // 同一个 URL 并发请求只发一次。
@@ -41,9 +55,8 @@ actor CoverImageLoader {
                       (200..<300).contains(http.statusCode) else {
                     return nil
                 }
-                // 失败时服务端返回 JSON，这里靠真实解码过滤掉。
-                guard let image = UIImage(data: data) else { return nil }
-                return image
+                // 失败时服务端返回 JSON，靠真实解码过滤掉。
+                return UIImage(data: data)
             } catch {
                 return nil
             }
@@ -54,13 +67,11 @@ actor CoverImageLoader {
         inFlight[url] = nil
 
         if let result {
-            memory.setObject(result, forKey: url as NSURL)
+            let cost = result.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+            memory.setObject(result, forKey: key, cost: cost)
+        } else {
+            misses.setObject(NSNumber(value: 1), forKey: key)
         }
         return result
-    }
-
-    /// 下拉刷新时调用，避免看到旧封面。
-    func clear() {
-        memory.removeAllObjects()
     }
 }

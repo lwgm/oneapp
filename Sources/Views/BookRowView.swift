@@ -7,8 +7,9 @@ struct BookCoverView: View {
     @State private var image: UIImage?
 
     private var remoteURL: URL? {
-        // has_cover 为 false 时不要发注定 404 的请求。
-        guard book.hasCover, book.bookID != nil else { return nil }
+        // 实测 has_cover 不可靠（有记录标 false 但实际能取到图），
+        // 所以只要有 book_id 就一直尝试，取不到自然回落到渐变占位。
+        guard book.bookID != nil else { return nil }
         return APIClient.shared.coverURL(for: book)
     }
 
