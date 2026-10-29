@@ -157,7 +157,8 @@ Sources/
   OneApp.swift              App 入口
   Assets.xcassets/          App 图标（1024 单尺寸）
   Settings/AppSettings.swift  服务器地址与用户名（可配置、本地持久化）
-  Models/    Book.swift              与 /history 记录一一对应（含 description）
+  Models/
+    Book.swift              与 /history 记录一一对应（含 description）
     ISBNValidator.swift     ISBN-10/13 校验位验证
   Networking/
     APIClient.swift         上传 / 历史 / 删除 / 封面 URL
