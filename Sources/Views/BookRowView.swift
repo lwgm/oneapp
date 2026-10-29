@@ -14,27 +14,37 @@ struct BookCoverView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            placeholder
+        // 用 GeometryReader 拿到真实尺寸，把图片显式约束到该尺寸再裁切。
+        // 直接 aspectRatio(.fill) 会让视图按比例撑大到超出父容器，
+        // 而 .frame() 只约束布局、不裁渲染，就会出现封面压到标题上的问题。
+        GeometryReader { proxy in
+            let size = proxy.size
 
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .transition(.opacity)
-                    .overlay(alignment: .leading) {
-                        // 薄书脊阴影，让图片也有立体感
-                        LinearGradient(
-                            colors: [Color.black.opacity(0.22), Color.clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: 5)
-                    }
+            ZStack(alignment: .topLeading) {
+                placeholder
+
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                        .overlay(alignment: .leading) {
+                            // 薄书脊阴影，让图片也有立体感
+                            LinearGradient(
+                                colors: [Color.black.opacity(0.22), Color.clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .frame(width: 5)
+                        }
+                        .transition(.opacity)
+                }
             }
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 3)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 3)
         .task(id: remoteURL) {
             guard let remoteURL else {
                 image = nil
