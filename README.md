@@ -12,7 +12,7 @@
 - [x] 里程碑 4：左滑删除（`POST /delete`）
 - [x] 里程碑 5：App 图标 + 连续扫描 / 批量上传
 - [x] 里程碑 6：设置页（服务器地址 / 用户名 / 连接测试）
-- [ ] 封面图 / 内容简介（等后端在 history 里返回 URL 与简介）
+- [x] 里程碑 7：内容简介 + 封面图
 
 ## 首次启动要配置
 
@@ -112,11 +112,22 @@ https://<你的服务器地址>     ← TLS 正常（ZeroSSL，机构根受信�
 - `authors` 是字符串数组，但 iOS 侧对单字符串也做了兼容
 - `created_at` 是 `"2026-10-29 12:40:11"` 这种格式，不是 ISO8601，按原样展示
 
-**7. 封面**
-`/history` 只返回 `has_cover` 布尔值，**没有封面 URL**。因此列表和详情页一律用按 ISBN 推导的渐变色块占位。
-后端补上封面地址后，只需给 `Book` 加字段并在 `BookCoverView` 里优先加载。
+**7. 内容简介**
+`/history` 的每条记录带 `description`，基本是纯文本。详情页按 6 行折叠并提供「展开全文」。
 
-**8. 认证**
+**8. 封面**
+`GET /cover?username=…&book_id=…&isbn=…`，三个参数都必填，**成功时返回二进制图片**（不是 JSON），
+失败才返回 JSON。**这个接口不需要 Authorization 头**。
+
+两个实测发现：
+
+- **`has_cover` 不可靠**：有记录标着 `false`，但 `/cover` 依然返回图片。所以只要 `book_id` 存在就一直尝试
+- **封面尺寸不统一**：实测有 800×800（正方形）和 500×453，不是标准 2:3。列表和详情用固定框 + `.fill` 裁切
+
+服务端给了 `ETag` 和 `Cache-Control: max-age=604800`，客户端再加一层内存缓存和失败记忆，
+所以滚动不会重复请求，撞过 404 的书也不再重试。
+
+**9. 认证**
 当前未启用 `api_token`，不带 `Authorization` 也能调。若将来启用，token **不能进仓库**（仓库是公开的）。
 认证（token）与授权（用户名允许名单）是两层，前者管"能不能访问服务"，后者管"这个用户能不能用"。
 
@@ -146,10 +157,11 @@ Sources/
   OneApp.swift              App 入口
   Assets.xcassets/          App 图标（1024 单尺寸）
   Settings/AppSettings.swift  服务器地址与用户名（可配置、本地持久化）
-  Models/    Book.swift              与 /history 记录一一对应的模型
+  Models/    Book.swift              与 /history 记录一一对应（含 description）
     ISBNValidator.swift     ISBN-10/13 校验位验证
   Networking/
-    APIClient.swift         上传 / 历史 / 删除
+    APIClient.swift         上传 / 历史 / 删除 / 封面 URL
+    CoverImageLoader.swift  封面图加载（内存缓存 + 失败记忆）
     LibraryStore.swift      书库数据源（加载 / 刷新 / 分页 / 删除）
   Theme/Palette.swift       配色与封面色板
   Camera/
@@ -157,7 +169,7 @@ Sources/
     CameraPreview.swift     预览层 UIViewRepresentable
   Views/
     LibraryView.swift       书库（根）+ 自绘标题行 + 未配置态 + 左滑删除
-    BookRowView.swift       列表行 + 封面占位
+    BookRowView.swift       列表行 + 封面（网络图，失败回落渐变）
     BookDetailView.swift    书籍详情
     ScannerView.swift       连续扫码（权限门 + 取景 + 手电筒 + 计数）
     CameraGateViews.swift   权限说明 / 被拒引导
