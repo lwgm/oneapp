@@ -162,6 +162,31 @@ final class APIClient {
         settings = .shared
     }
 
+    // MARK: 封面
+
+    /// 拼 `/cover?username=…&book_id=…&isbn=…`。
+    /// 这个接口成功时返回二进制图片，且不需要 Authorization 头，
+    /// 因此可以直接交给图片加载层。
+    func coverURL(for book: Book) -> URL? {
+        guard let base = settings.normalizedServerURL,
+              let name = settings.normalizedUsername,
+              let bookID = book.bookID,
+              !book.isbn.isEmpty else {
+            return nil
+        }
+
+        var components = URLComponents(
+            url: base.appendingPathComponent("cover"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: Wire.identity, value: name),
+            URLQueryItem(name: "book_id", value: String(bookID)),
+            URLQueryItem(name: "isbn", value: book.isbn)
+        ]
+        return components?.url
+    }
+
     // MARK: 请求构造
 
     private func endpoint(_ path: String) throws -> URL {

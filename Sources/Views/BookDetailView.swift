@@ -3,6 +3,8 @@ import SwiftUI
 struct BookDetailView: View {
     let book: Book
 
+    @State private var isBlurbExpanded = false
+
     private var statusColor: Color {
         if book.status.isFailure {
             return Color(red: 0.75, green: 0.22, blue: 0.17)
@@ -39,6 +41,11 @@ struct BookDetailView: View {
                 hero
                 metadataCard(rows)
 
+                if book.hasBlurb, let blurb = book.blurb {
+                    sectionTitle("内容简介")
+                    blurbCard(blurb)
+                }
+
                 if book.status.isFailure {
                     noticeCard(
                         title: "这本书没有上传成功",
@@ -51,10 +58,10 @@ struct BookDetailView: View {
                         body: "后端只返回了 ISBN，没有书名和作者。等抓取成功后重新加载即可显示完整信息。",
                         color: Color(red: 0.70, green: 0.47, blue: 0.09)
                     )
-                } else {
+                } else if !book.hasBlurb && !book.hasCover {
                     noticeCard(
-                        title: "封面与简介暂未提供",
-                        body: "当前接口只返回「是否有封面」的标记，没有封面地址和内容简介。接口补充后这里会自动显示。",
+                        title: "暂无简介与封面",
+                        body: "这本书的元数据里没有内容简介，服务端也没有存到封面。",
                         color: Color.sub
                     )
                 }
@@ -64,6 +71,52 @@ struct BookDetailView: View {
         .background(Color.paper.ignoresSafeArea())
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - 简介
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Color.sub.opacity(0.75))
+            .tracking(1.2)
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 9)
+    }
+
+    private func blurbCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundStyle(Color(red: 0.2, green: 0.211, blue: 0.235))
+                .lineSpacing(6)
+                .lineLimit(isBlurbExpanded ? nil : 6)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isBlurbExpanded.toggle()
+                }
+            } label: {
+                Text(isBlurbExpanded ? "收起" : "展开全文")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 10)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color.white,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.ink.opacity(0.07), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
     }
 
     private var hero: some View {

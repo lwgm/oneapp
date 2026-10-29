@@ -41,6 +41,8 @@ struct Book: Identifiable, Hashable, Decodable {
     let hasCover: Bool
     let cost: String?
     let createdAt: String?
+    /// 书籍简介。基本为纯文本，极少数带少量 Markdown 记号。
+    let blurb: String?
 
     enum CodingKeys: String, CodingKey {
         case id, isbn, title, authors, publisher, status, success, cost
@@ -49,6 +51,7 @@ struct Book: Identifiable, Hashable, Decodable {
         case bookID = "book_id"
         case hasCover = "has_cover"
         case createdAt = "created_at"
+        case blurb = "description"
     }
 
     init(
@@ -64,7 +67,8 @@ struct Book: Identifiable, Hashable, Decodable {
         bookID: Int? = nil,
         hasCover: Bool = false,
         cost: String? = nil,
-        createdAt: String? = nil
+        createdAt: String? = nil,
+        blurb: String? = nil
     ) {
         self.id = id
         self.isbn = isbn
@@ -79,6 +83,7 @@ struct Book: Identifiable, Hashable, Decodable {
         self.hasCover = hasCover
         self.cost = cost
         self.createdAt = createdAt
+        self.blurb = blurb
     }
 
     init(from decoder: Decoder) throws {
@@ -96,6 +101,7 @@ struct Book: Identifiable, Hashable, Decodable {
         hasCover = try container.decodeIfPresent(Bool.self, forKey: .hasCover) ?? false
         cost = try container.decodeIfPresent(String.self, forKey: .cost)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        blurb = try container.decodeIfPresent(String.self, forKey: .blurb)
     }
 
     /// 文档约定 authors 是字符串数组，但为了不被单字符串噎住，这里两种都接受。
@@ -129,7 +135,12 @@ struct Book: Identifiable, Hashable, Decodable {
         return !title.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// 后端只返回 has_cover 布尔值，没有封面 URL，因此一律使用渐变占位。
+    /// 有简介且不是空白。
+    var hasBlurb: Bool {
+        guard let blurb else { return false }
+        return !blurb.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var effectiveStatusText: String {
         statusText.isEmpty ? status.label : statusText
     }
@@ -142,7 +153,8 @@ extension Book {
         authors: [String] = ["Randal E. Bryant"],
         publisher: String? = "机械工业出版社",
         status: UploadStatus = .success,
-        statusText: String = "已上传"
+        statusText: String = "已上传",
+        blurb: String? = "本书从程序员的视角详细阐述计算机系统的本质概念，并展示这些概念如何实实在在地影响应用程序的正确性、性能和实用性。"
     ) -> Book {
         Book(
             id: abs(isbn.hashValue % 100_000),
@@ -157,7 +169,8 @@ extension Book {
             bookID: 42,
             hasCover: true,
             cost: "23.4s",
-            createdAt: "2026-10-29 12:40:11"
+            createdAt: "2026-10-29 12:40:11",
+            blurb: blurb
         )
     }
 }

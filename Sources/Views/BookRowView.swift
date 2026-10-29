@@ -4,7 +4,50 @@ struct BookCoverView: View {
     let book: Book
     var showsTitle: Bool = false
 
+    @State private var image: UIImage?
+
+    private var remoteURL: URL? {
+        // has_cover 为 false 时不要发注定 404 的请求。
+        guard book.hasCover, book.bookID != nil else { return nil }
+        return APIClient.shared.coverURL(for: book)
+    }
+
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            placeholder
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .transition(.opacity)
+                    .overlay(alignment: .leading) {
+                        // 薄书脊阴影，让图片也有立体感
+                        LinearGradient(
+                            colors: [Color.black.opacity(0.22), Color.clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: 5)
+                    }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 3)
+        .task(id: remoteURL) {
+            guard let remoteURL else {
+                image = nil
+                return
+            }
+            let loaded = await CoverImageLoader.shared.image(for: remoteURL)
+            // 加载不到就保持渐变占位，不显示错误。
+            withAnimation(.easeOut(duration: 0.18)) {
+                image = loaded
+            }
+        }
+    }
+
+    private var placeholder: some View {
         ZStack(alignment: .topLeading) {
             CoverPalette.gradient(for: book.isbn)
 
@@ -15,7 +58,7 @@ struct BookCoverView: View {
             )
             .frame(width: 6)
 
-            if showsTitle && book.hasMetadata {
+            if showsTitle && book.hasMetadata && image == nil {
                 Text(book.title ?? "")
                     .font(.system(size: 14.5, weight: .semibold, design: .serif))
                     .foregroundStyle(Color(red: 0.941, green: 0.925, blue: 0.882))
@@ -25,8 +68,6 @@ struct BookCoverView: View {
                     .padding(.vertical, 15)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 3)
     }
 }
 
