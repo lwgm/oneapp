@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# XcodeGen 生成物
+*.xcodeproj
+*.xcworkspace
+Support/Info.plist
+
+# 构建产物
+build/
+dist/
+DerivedData/
+*.ipa
+*.xcarchive
+Payload/
+
+# Xcode 用户数据
+xcuserdata/
+*.xcuserstate

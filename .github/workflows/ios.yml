@@ -1,0 +1,96 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 编译检查（模拟器）
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成工程
+        run: xcodegen generate
+
+      - name: 编译
+        run: |
+          xcodebuild build \
+            -project OneApp.xcodeproj \
+            -scheme OneApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+  ipa:
+    name: 打包未签名 IPA
+    needs: build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成工程
+        run: xcodegen generate
+
+      - name: 编译真机版本
+        run: |
+          xcodebuild build \
+            -project OneApp.xcodeproj \
+            -scheme OneApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: 组装 IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Build/Products/Release-iphoneos/OneApp.app"
+
+          echo "== 产物 =="
+          ls -d "$APP_PATH"
+          plutil -p "$APP_PATH/Info.plist" | head -30
+
+          echo "== 架构 =="
+          lipo -archs "$APP_PATH/OneApp"
+
+          rm -rf Payload OneApp.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry OneApp.ipa Payload
+          rm -rf Payload
+
+          echo "== IPA =="
+          ls -lh OneApp.ipa
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: OneApp-unsigned-${{ github.run_number }}
+          path: OneApp.ipa
+          if-no-files-found: error
+          retention-days: 30
