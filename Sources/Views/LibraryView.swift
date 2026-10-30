@@ -48,7 +48,19 @@ struct LibraryView: View {
             content
                 .background(Color.paper.ignoresSafeArea())
                 .navigationTitle("书库")
-                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            path.append(Route.settings)
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 17, weight: .regular))
+                                .foregroundStyle(Color.sub)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 .safeAreaInset(edge: .bottom) {
                     if settings.isConfigured {
                         scanButton
@@ -120,42 +132,6 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: - 页头
-
-    /// 自带标题行：书库 / N 本 / 齿轮 在同一行。
-    /// 系统的 large title 无法把工具项排进标题行，所以这里不用导航栏标题。
-    private var header: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Text("书库")
-                .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(Color.ink)
-
-            Spacer(minLength: 8)
-
-            if store.total > 0 {
-                Text("\(store.total) 本")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.sub.opacity(0.7))
-                    .padding(.bottom, 5)
-            }
-
-            Button {
-                path.append(Route.settings)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(Color.sub)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 1)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 6)
-        .padding(.bottom, 14)
-    }
-
     private func reloadAfterSettingsChange() {
         Task { await store.refresh() }
     }
@@ -195,32 +171,25 @@ struct LibraryView: View {
     private var content: some View {
         if !settings.isConfigured {
             ScrollView {
-                VStack(spacing: 0) {
-                    header
-                    SetupPromptView {
-                        path.append(Route.settings)
-                    }
-                    .frame(minHeight: 440)
+                SetupPromptView {
+                    path.append(Route.settings)
                 }
+                .frame(minHeight: 460)
             }
         } else if store.books.isEmpty {
             ScrollView {
-                VStack(spacing: 0) {
-                    header
+                Group {
                     if store.isLoading {
                         ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 440)
                     } else if let errorMessage = store.errorMessage {
                         LibraryErrorView(message: errorMessage) {
                             Task { await store.refresh() }
                         }
-                        .frame(minHeight: 440)
                     } else {
                         EmptyLibraryView()
-                            .frame(minHeight: 440)
                     }
                 }
+                .frame(minHeight: 460)
             }
             .refreshable { await store.refresh() }
         } else {
@@ -230,11 +199,6 @@ struct LibraryView: View {
 
     private var bookList: some View {
         List {
-            header
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-
             if let errorMessage = store.errorMessage {
                 inlineError(errorMessage)
                     .listRowInsets(EdgeInsets())
@@ -243,7 +207,7 @@ struct LibraryView: View {
             }
 
             searchField
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 14, trailing: 20))
+                .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 14, trailing: 20))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
 
