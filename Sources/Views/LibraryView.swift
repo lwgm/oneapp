@@ -179,7 +179,7 @@ struct LibraryView: View {
         } else if store.books.isEmpty {
             ScrollView {
                 Group {
-                    if store.isLoading {
+                    if !store.hasLoadedOnce {
                         ProgressView()
                     } else if let errorMessage = store.errorMessage {
                         LibraryErrorView(message: errorMessage) {

@@ -4,7 +4,9 @@ import Combine
 final class LibraryStore: ObservableObject {
     @Published private(set) var books: [Book] = []
     @Published private(set) var total = 0
-    @Published private(set) var isLoading = false
+    /// 是否已经完成过一次加载尝试（成功或失败都算）。
+    /// 首帧用它挡住空态，避免在数据到达前闪现一次「书库还是空的」。
+    @Published private(set) var hasLoadedOnce = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var hasMore = false
     @Published private(set) var errorMessage: String?
@@ -19,9 +21,7 @@ final class LibraryStore: ObservableObject {
     func loadInitialIfNeeded() async {
         guard !didLoadOnce else { return }
         didLoadOnce = true
-        isLoading = true
         await reload()
-        isLoading = false
     }
 
     /// 下拉刷新与上传完成后调用，保持当前列表直到新数据到达。
@@ -61,9 +61,12 @@ final class LibraryStore: ObservableObject {
             hasMore = page.hasMore ?? false
             nextBeforeID = page.nextBeforeID
             errorMessage = nil
+            hasLoadedOnce = true
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
+            // 失败也算尝试过，否则会一直停在加载态而看不到错误。
+            hasLoadedOnce = true
         }
     }
 
