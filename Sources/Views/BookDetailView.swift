@@ -2,8 +2,15 @@ import SwiftUI
 
 struct BookDetailView: View {
     let book: Book
+    /// 重试上传结束后回调，让书库刷新。
+    var onChanged: () -> Void = {}
+
+    @Environment(\.dismiss) private var dismiss
 
     @State private var isBlurbExpanded = false
+    @State private var isRetrying = false
+
+    private var isRetryable: Bool { !book.success }
 
     private var statusColor: Color {
         if book.status.isFailure {
@@ -46,10 +53,10 @@ struct BookDetailView: View {
                     blurbCard(blurb)
                 }
 
-                if book.status.isFailure {
+                if book.status.isFailure || !book.success {
                     noticeCard(
                         title: "这本书没有上传成功",
-                        body: "后端抓取或生成 EPUB 失败。可以回到书库重新扫描同一个 ISBN 再试一次。",
+                        body: "后端抓取或生成 EPUB 失败。可以直接用下面的「重试上传」再试一次，不需要重新扫描。",
                         color: statusColor
                     )
                 } else if !book.hasMetadata {
@@ -69,8 +76,57 @@ struct BookDetailView: View {
             .padding(.bottom, 40)
         }
         .background(Color.paper.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            if isRetryable {
+                retryBar
+            }
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isRetrying) {
+            BatchUploadView(isbns: [book.isbn], autoStart: true) {
+                // 重试结束后这本书的状态可能已变（成功 / 仍然失败），
+                // 详情页持有的是快照，所以回到书库看最新结果。
+                onChanged()
+            }
+            .onDisappear {
+                dismiss()
+            }
+        }
+    }
+
+    private var retryBar: some View {
+        VStack(spacing: 0) {
+            Button {
+                isRetrying = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("重试上传")
+                        .font(.system(size: 15.5, weight: .semibold))
+                }
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    Color.ink,
+                    in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(
+            LinearGradient(
+                colors: [Color.paper.opacity(0), Color.paper],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
     }
 
     // MARK: - 简介

@@ -122,6 +122,29 @@ struct DeleteResult: Decodable {
     var wasKeptInLibrary: Bool { !keptInLibrary.isEmpty }
 }
 
+// MARK: - 删除上传记录
+
+/// `/history/delete` 的响应：只清 failed / pending 记录，不碰 Calibre。
+struct HistoryDeleteResult: Decodable {
+    let success: Bool
+    let code: Int?
+    let message: String?
+    let removedRecords: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case success, code, message
+        case removedRecords = "removed_records"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeIfPresent(Bool.self, forKey: .success) ?? false
+        code = try container.decodeIfPresent(Int.self, forKey: .code)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        removedRecords = try container.decodeIfPresent(Int.self, forKey: .removedRecords)
+    }
+}
+
 // MARK: - 连接测试
 
 enum ConnectionTestResult {
@@ -365,6 +388,40 @@ final class APIClient {
         }
         guard decoded.success else {
             throw APIError.server(decoded.message ?? "删除失败")
+        }
+        return decoded
+    }
+
+    /// 清除某本书的「失败 / 处理中」记录。
+    /// 删除粒度是 (用户名, ISBN)，一次会清掉这本书的全部残留失败行；
+    /// 它**绝不删成功记录**，也**完全不碰 Calibre**，所以不需要 book_id。
+    func deleteHistory(isbn: String) async throws -> HistoryDeleteResult {
+        let url = try endpoint("history").appendingPathComponent("delete")
+        let name = try identity()
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let payload: [String: Any] = [
+            Wire.identity: name,
+            "isbn": isbn
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        let data: Data
+        do {
+            let result = try await plainSession.data(for: request)
+            data = result.0
+        } catch {
+            throw APIError.network(error.localizedDescription)
+        }
+
+        guard let decoded = try? JSONDecoder().decode(HistoryDeleteResult.self, from: data) else {
+            throw APIError.invalidResponse
+        }
+        guard decoded.success else {
+            throw APIError.server(decoded.message ?? "清除记录失败")
         }
         return decoded
     }

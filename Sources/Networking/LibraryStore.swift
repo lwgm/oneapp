@@ -77,10 +77,22 @@ final class LibraryStore: ObservableObject {
 
     // MARK: - 删除
 
-    /// 从书库移除一条记录。成功后直接刷新列表，保证与后端一致。
+    /// 从书库移除一条记录。
+    ///
+    /// 两类记录走两个完全不同的接口：
+    /// - `success == true`（书已在书单里）→ `/delete`，需要 `book_id`，**会真的删 Calibre 里的书**
+    /// - `success == false`（失败 / 处理中，只是上传日志）→ `/history/delete`，按 ISBN 清记录，
+    ///   **完全不碰 Calibre**，也不需要 `book_id`
     func delete(_ book: Book) async -> String? {
+        if book.success {
+            return await deleteFromLibrary(book)
+        }
+        return await deleteHistoryRecord(book)
+    }
+
+    private func deleteFromLibrary(_ book: Book) async -> String? {
         guard let bookID = book.bookID else {
-            return "这条记录没有 book_id，无法通过接口删除"
+            return "这条记录缺少 book_id，无法从库中删除"
         }
 
         do {
@@ -92,6 +104,21 @@ final class LibraryStore: ObservableObject {
 
             await reload()
             return result.wasKeptInLibrary ? "已从你的书单移除（库中仍有其他用户）" : nil
+        } catch {
+            return (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+    }
+
+    private func deleteHistoryRecord(_ book: Book) async -> String? {
+        do {
+            _ = try await APIClient.shared.deleteHistory(isbn: book.isbn)
+
+            books.removeAll { $0.id == book.id }
+            total = max(0, total - 1)
+
+            await reload()
+            return nil
         } catch {
             return (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription

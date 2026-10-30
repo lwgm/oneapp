@@ -57,7 +57,9 @@ struct LibraryView: View {
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .book(let book):
-                        BookDetailView(book: book)
+                        BookDetailView(book: book) {
+                            Task { await store.refresh() }
+                        }
                     case .settings:
                         SettingsView()
                     }
@@ -97,7 +99,7 @@ struct LibraryView: View {
             titleVisibility: .visible
         ) {
             if let target = deleteTarget {
-                Button("删除", role: .destructive) {
+                Button(deleteActionTitle, role: .destructive) {
                     let book = target
                     deleteTarget = nil
                     performDelete(book)
@@ -105,7 +107,7 @@ struct LibraryView: View {
             }
             Button("取消", role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("会从你的书单移除，并从 Calibre 库中删除。删除后这个 ISBN 可以重新上传。")
+            Text(deleteExplanation)
         }
         .alert(
             banner?.text ?? "",
@@ -160,7 +162,23 @@ struct LibraryView: View {
 
     private var deleteTitle: String {
         guard let deleteTarget else { return "删除这本书？" }
-        return "删除「\(deleteTarget.displayTitle)」？"
+        if deleteTarget.success {
+            return "删除「\(deleteTarget.displayTitle)」？"
+        }
+        return "清除「\(deleteTarget.displayTitle)」的失败记录？"
+    }
+
+    private var deleteActionTitle: String {
+        guard let deleteTarget else { return "删除" }
+        return deleteTarget.success ? "删除" : "清除记录"
+    }
+
+    private var deleteExplanation: String {
+        guard let deleteTarget else { return "" }
+        if deleteTarget.success {
+            return "会从你的书单移除，并从 Calibre 库中删除。删除后这个 ISBN 可以重新上传。"
+        }
+        return "只清掉这条上传记录，不会影响 Calibre 里的任何书。之后可以重新扫描或重试上传。"
     }
 
     private func performDelete(_ book: Book) {
