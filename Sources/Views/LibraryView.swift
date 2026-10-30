@@ -180,16 +180,25 @@ struct LibraryView: View {
             ScrollView {
                 Group {
                     if !store.hasLoadedOnce {
-                        ProgressView()
+                        // 用一个可伸缩的容器吸收高度提案。
+                        // 直接把 .frame(minHeight:) 压在 ProgressView 上，
+                        // iOS 26 会把它那层玻璃底衬垂直拉成一条整屏光带。
+                        ZStack {
+                            Color.clear
+                            ProgressView()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 460)
                     } else if let errorMessage = store.errorMessage {
                         LibraryErrorView(message: errorMessage) {
                             Task { await store.refresh() }
                         }
+                        .frame(minHeight: 460)
                     } else {
                         EmptyLibraryView()
+                            .frame(minHeight: 460)
                     }
                 }
-                .frame(minHeight: 460)
             }
             .refreshable { await store.refresh() }
         } else {
