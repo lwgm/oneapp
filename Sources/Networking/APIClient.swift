@@ -85,42 +85,50 @@ struct LoadError {
     let suggestsSettings: Bool
 
     init(_ error: APIError) {
+        let resolvedTitle: String
+        let resolvedMessage: String
+        let resolvedSuggestsSettings: Bool
+
         switch error {
         case .notConfigured:
-            title = "还没连接服务器"
-            message = "请在设置里填写服务器地址和用户名。"
-            suggestsSettings = true
+            resolvedTitle = "还没连接服务器"
+            resolvedMessage = "请在设置里填写服务器地址和用户名。"
+            resolvedSuggestsSettings = true
         case .invalidAddress(let detail):
-            title = "服务器地址不正确"
-            message = detail
-            suggestsSettings = true
+            resolvedTitle = "服务器地址不正确"
+            resolvedMessage = detail
+            resolvedSuggestsSettings = true
         case .insecureConnection(let detail):
-            title = "连接不安全"
-            message = detail
-            suggestsSettings = true
+            resolvedTitle = "连接不安全"
+            resolvedMessage = detail
+            resolvedSuggestsSettings = true
         case .notOurServer:
-            title = "地址不对"
-            message = "这个地址能连上，但返回的不是书籍接口。请确认填的是后端根地址，末尾不要带路径。"
-            suggestsSettings = true
-        case .notAllowed(let message):
-            title = "没有访问权限"
-            message = message.isEmpty
+            resolvedTitle = "地址不对"
+            resolvedMessage = "这个地址能连上，但返回的不是书籍接口。请确认填的是后端根地址，末尾不要带路径。"
+            resolvedSuggestsSettings = true
+        case .notAllowed(let detail):
+            resolvedTitle = "没有访问权限"
+            resolvedMessage = detail.isEmpty
                 ? "这个用户名不在服务器的允许名单里，请到设置中确认。"
-                : "\(message)。请确认设置里的用户名已在服务器允许名单中。"
-            suggestsSettings = true
+                : "\(detail)。请确认设置里的用户名已在服务器允许名单中。"
+            resolvedSuggestsSettings = true
         case .authRequired:
-            title = "需要身份认证"
-            message = "服务端启用了访问令牌，当前版本还不支持填写。"
-            suggestsSettings = true
+            resolvedTitle = "需要身份认证"
+            resolvedMessage = "服务端启用了访问令牌，当前版本还不支持填写。"
+            resolvedSuggestsSettings = true
         case .unreachable(let detail):
-            title = "无法连接服务器"
-            message = detail
-            suggestsSettings = false
-        case .server(let message):
-            title = "无法加载书库"
-            message = message
-            suggestsSettings = false
+            resolvedTitle = "无法连接服务器"
+            resolvedMessage = detail
+            resolvedSuggestsSettings = false
+        case .server(let detail):
+            resolvedTitle = "无法加载书库"
+            resolvedMessage = detail
+            resolvedSuggestsSettings = false
         }
+
+        title = resolvedTitle
+        message = resolvedMessage
+        suggestsSettings = resolvedSuggestsSettings
     }
 }
 
