@@ -132,8 +132,10 @@ struct LibraryView: View {
         }
     }
 
+    /// 配置变了意味着换了身份，旧书单属于上一个用户名，继续显示会误导。
+    /// 所以先清空再加载，结果与冷启动一致。
     private func reloadAfterSettingsChange() {
-        Task { await store.refresh() }
+        Task { await store.reloadForNewIdentity() }
     }
 
     private var deleteTitle: String {
@@ -189,10 +191,12 @@ struct LibraryView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 460)
-                    } else if let errorMessage = store.errorMessage {
-                        LibraryErrorView(message: errorMessage) {
-                            Task { await store.refresh() }
-                        }
+                    } else if let loadError = store.loadError {
+                        LibraryErrorView(
+                            error: loadError,
+                            onRetry: { Task { await store.refresh() } },
+                            onOpenSettings: { path.append(Route.settings) }
+                        )
                         .frame(minHeight: 460)
                     } else {
                         EmptyLibraryView()
@@ -208,8 +212,8 @@ struct LibraryView: View {
 
     private var bookList: some View {
         List {
-            if let errorMessage = store.errorMessage {
-                inlineError(errorMessage)
+            if let loadError = store.loadError {
+                inlineError(loadError.message)
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -430,32 +434,40 @@ struct SetupPromptView: View {
 }
 
 struct LibraryErrorView: View {
-    let message: String
+    let error: LoadError
     let onRetry: () -> Void
+    let onOpenSettings: () -> Void
+
+    /// 配置类问题给「去设置」，网络类问题给「重试」。
+    private var icon: String {
+        error.suggestsSettings ? "gearshape" : "wifi.exclamationmark"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            Image(systemName: "wifi.exclamationmark")
+            Image(systemName: icon)
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Color.sub.opacity(0.55))
                 .padding(.bottom, 20)
 
-            Text("无法加载书库")
+            Text(error.title)
                 .font(.system(size: 17, weight: .semibold))
                 .padding(.bottom, 10)
 
-            Text(message)
+            Text(error.message)
                 .font(.system(size: 13))
                 .foregroundStyle(Color.sub)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-                .padding(.horizontal, 44)
+                .padding(.horizontal, 40)
                 .padding(.bottom, 24)
 
-            Button(action: onRetry) {
-                Text("重试")
+            Button {
+                error.suggestsSettings ? onOpenSettings() : onRetry()
+            } label: {
+                Text(error.suggestsSettings ? "去设置" : "重试")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 34)
@@ -466,6 +478,17 @@ struct LibraryErrorView: View {
                     )
             }
             .buttonStyle(.plain)
+
+            if error.suggestsSettings {
+                Button(action: onRetry) {
+                    Text("重新加载")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.sub)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+            }
 
             Spacer()
             Spacer()

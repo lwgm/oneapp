@@ -3,21 +3,123 @@ import Foundation
 // MARK: - 错误
 
 enum APIError: LocalizedError {
+    /// 还没填服务器地址或用户名。
     case notConfigured
-    case network(String)
-    case invalidResponse
+    /// 地址本身不合法（协议、主机名）。
+    case invalidAddress(String)
+    /// 连不上：DNS、拒绝连接、超时、断网。
+    case unreachable(String)
+    /// 证书问题，或用了 http 被 ATS 拦下。
+    case insecureConnection(String)
+    /// 连上了，但返回的不是我们这个接口的内容。
+    case notOurServer
+    /// 403：用户名不在允许名单，或服务端未开启该功能。
+    case notAllowed(String)
+    /// 401：服务端启用了 token。
+    case authRequired
+    /// 其它业务错误，直接展示服务端文案。
     case server(String)
 
     var errorDescription: String? {
         switch self {
         case .notConfigured:
-            return "尚未配置服务器地址或用户名，请先到设置里填写"
-        case .network(let message):
-            return "网络连接失败：\(message)"
-        case .invalidResponse:
-            return "服务器返回了无法识别的内容"
+            return "尚未配置服务器地址或用户名"
+        case .invalidAddress(let detail):
+            return detail
+        case .unreachable(let detail):
+            return detail
+        case .insecureConnection(let detail):
+            return detail
+        case .notOurServer:
+            return "这个地址返回的不是接口数据"
+        case .notAllowed(let message):
+            return message
+        case .authRequired:
+            return "服务端要求身份认证"
         case .server(let message):
             return message
+        }
+    }
+
+    /// 把底层网络错误翻译成能指导用户下一步的说明。
+    static func from(_ error: Error) -> APIError {
+        guard let urlError = error as? URLError else {
+            return .unreachable(error.localizedDescription)
+        }
+
+        switch urlError.code {
+        case .cannotFindHost:
+            return .unreachable("找不到这个主机名，请检查地址是否拼错")
+        case .cannotConnectToHost:
+            return .unreachable("无法连接该地址和端口，请确认服务已启动、端口正确")
+        case .dnsLookupFailed:
+            return .unreachable("域名解析失败，请检查地址或当前网络")
+        case .notConnectedToInternet:
+            return .unreachable("设备当前没有网络连接")
+        case .networkConnectionLost:
+            return .unreachable("连接被中断，请稍后重试")
+        case .timedOut:
+            return .unreachable("连接超时，服务器没有响应")
+        case .secureConnectionFailed,
+             .serverCertificateUntrusted,
+             .serverCertificateHasBadDate,
+             .serverCertificateNotYetValid,
+             .serverCertificateHasUnknownRoot:
+            return .insecureConnection("HTTPS 证书未通过验证，请确认地址与证书配置")
+        case .appTransportSecurityRequiresSecureConnection:
+            return .insecureConnection("iOS 不允许明文 http 请求，请改用 https://")
+        default:
+            return .unreachable(urlError.localizedDescription)
+        }
+    }
+}
+
+// MARK: - 给界面用的错误描述
+
+/// 把错误整理成「标题 / 说明 / 是否该去设置里改」三件事，
+/// 好让错误页告诉用户下一步做什么，而不是只丢一句原因。
+struct LoadError {
+    let title: String
+    let message: String
+    /// true 表示问题出在配置上，展示「去设置」比「重试」更有效。
+    let suggestsSettings: Bool
+
+    init(_ error: APIError) {
+        switch error {
+        case .notConfigured:
+            title = "还没连接服务器"
+            message = "请在设置里填写服务器地址和用户名。"
+            suggestsSettings = true
+        case .invalidAddress(let detail):
+            title = "服务器地址不正确"
+            message = detail
+            suggestsSettings = true
+        case .insecureConnection(let detail):
+            title = "连接不安全"
+            message = detail
+            suggestsSettings = true
+        case .notOurServer:
+            title = "地址不对"
+            message = "这个地址能连上，但返回的不是书籍接口。请确认填的是后端根地址，末尾不要带路径。"
+            suggestsSettings = true
+        case .notAllowed(let message):
+            title = "没有访问权限"
+            message = message.isEmpty
+                ? "这个用户名不在服务器的允许名单里，请到设置中确认。"
+                : "\(message)。请确认设置里的用户名已在服务器允许名单中。"
+            suggestsSettings = true
+        case .authRequired:
+            title = "需要身份认证"
+            message = "服务端启用了访问令牌，当前版本还不支持填写。"
+            suggestsSettings = true
+        case .unreachable(let detail):
+            title = "无法连接服务器"
+            message = detail
+            suggestsSettings = false
+        case .server(let message):
+            title = "无法加载书库"
+            message = message
+            suggestsSettings = false
         }
     }
 }
@@ -247,7 +349,7 @@ final class APIClient {
         do {
             let data = try await get(finalURL)
             guard let check = try? JSONDecoder().decode(AccessCheck.self, from: data) else {
-                return .failed("服务器返回了无法识别的内容")
+                return .failed("这个地址返回的不是接口数据，请确认填的是后端根地址")
             }
             guard check.success else {
                 return .failed(check.message ?? "服务器拒绝了这次请求")
@@ -256,8 +358,14 @@ final class APIClient {
                 return .allowed(check.message ?? "已开通")
             }
             return .denied(check.message ?? "功能暂时没开通")
+        } catch let error as APIError {
+            // 403 说明地址是通的，只是这个用户名没权限 —— 对测试连接来说是有价值的结论。
+            if case .notAllowed(let message) = error {
+                return .denied(message.isEmpty ? "功能暂时没开通" : message)
+            }
+            return .failed(error.errorDescription ?? "连接失败")
         } catch {
-            return .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return .failed(APIError.from(error).errorDescription ?? "连接失败")
         }
     }
 
@@ -292,7 +400,7 @@ final class APIClient {
         } catch let error as URLError where error.code == .timedOut {
             return .timedOut
         } catch {
-            return .failed(error.localizedDescription)
+            return .failed(APIError.from(error).errorDescription ?? "上传失败")
         }
     }
 
@@ -346,12 +454,12 @@ final class APIClient {
         components?.queryItems = queryItems
 
         guard let url = components?.url else {
-            throw APIError.invalidResponse
+            throw APIError.notOurServer
         }
 
         let data = try await get(url)
         guard let page = try? JSONDecoder().decode(HistoryPage.self, from: data) else {
-            throw APIError.invalidResponse
+            throw APIError.notOurServer
         }
         guard page.success else {
             throw APIError.server(page.message ?? "服务器拒绝了这次请求")
@@ -380,11 +488,11 @@ final class APIClient {
             let result = try await plainSession.data(for: request)
             data = result.0
         } catch {
-            throw APIError.network(error.localizedDescription)
+            throw APIError.from(error)
         }
 
         guard let decoded = try? JSONDecoder().decode(DeleteResult.self, from: data) else {
-            throw APIError.invalidResponse
+            throw APIError.notOurServer
         }
         guard decoded.success else {
             throw APIError.server(decoded.message ?? "删除失败")
@@ -414,11 +522,11 @@ final class APIClient {
             let result = try await plainSession.data(for: request)
             data = result.0
         } catch {
-            throw APIError.network(error.localizedDescription)
+            throw APIError.from(error)
         }
 
         guard let decoded = try? JSONDecoder().decode(HistoryDeleteResult.self, from: data) else {
-            throw APIError.invalidResponse
+            throw APIError.notOurServer
         }
         guard decoded.success else {
             throw APIError.server(decoded.message ?? "清除记录失败")
@@ -437,20 +545,33 @@ final class APIClient {
             data = result.0
             response = result.1
         } catch {
-            throw APIError.network(error.localizedDescription)
+            throw APIError.from(error)
         }
 
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+
         if status == 401 {
-            throw APIError.server("接口需要认证，请检查服务端配置")
+            throw APIError.authRequired
         }
+
+        // 403 几乎总是「用户名不在允许名单」，单独给出去设置的建议。
+        if status == 403 {
+            let message = (try? JSONDecoder().decode(Envelope.self, from: data))?.message
+            throw APIError.notAllowed(message ?? "")
+        }
+
         guard (200..<300).contains(status) else {
-            // 业务失败也常以 200 返回，走到这里通常是网关或路径问题。
             if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
                let message = envelope.message, !message.isEmpty {
                 throw APIError.server(message)
             }
             throw APIError.server("请求失败（HTTP \(status)）")
+        }
+
+        // 连上了、状态码也对，但返回的不是 JSON —— 多半是把地址填成了网页。
+        if let mime = http?.mimeType, !mime.contains("json") {
+            throw APIError.notOurServer
         }
         return data
     }

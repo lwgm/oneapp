@@ -9,7 +9,8 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var hasLoadedOnce = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var hasMore = false
-    @Published private(set) var errorMessage: String?
+    /// 结构化错误：错误页需要知道「该重试还是该去设置」。
+    @Published private(set) var loadError: LoadError?
 
     private var nextBeforeID: Int?
     private var didLoadOnce = false
@@ -25,7 +26,25 @@ final class LibraryStore: ObservableObject {
     }
 
     /// 下拉刷新与上传完成后调用，保持当前列表直到新数据到达。
+    ///
+    /// 失败时不清空列表是有意为之：网络抖动不该让你丢掉正在看的内容。
     func refresh() async {
+        await reload()
+    }
+
+    /// 服务器地址或用户名变了。
+    ///
+    /// 已有的书单属于旧身份，继续显示会造成误导（比如「用户名没权限」的
+    /// 错误条下面还挂着上一个用户名抓到的书）。所以这里先清空再重新加载，
+    /// 让结果与冷启动完全一致。
+    func reloadForNewIdentity() async {
+        books = []
+        total = 0
+        hasMore = false
+        nextBeforeID = nil
+        loadError = nil
+        hasLoadedOnce = false
+        didLoadOnce = true
         await reload()
     }
 
@@ -43,11 +62,18 @@ final class LibraryStore: ObservableObject {
                 beforeID: beforeID
             )
             append(page)
-            errorMessage = nil
+            loadError = nil
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            loadError = .init(Self.apiError(from: error))
         }
+    }
+
+    /// 把任意错误收敛到 `APIError`，避免各层各自拼文案。
+    private static func apiError(from error: Error) -> APIError {
+        if let apiError = error as? APIError {
+            return apiError
+        }
+        return APIError.from(error)
     }
 
     private func reload() async {
@@ -60,11 +86,10 @@ final class LibraryStore: ObservableObject {
             total = page.total ?? page.items.count
             hasMore = page.hasMore ?? false
             nextBeforeID = page.nextBeforeID
-            errorMessage = nil
+            loadError = nil
             hasLoadedOnce = true
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            loadError = .init(Self.apiError(from: error))
             // 失败也算尝试过，否则会一直停在加载态而看不到错误。
             hasLoadedOnce = true
         }
@@ -108,8 +133,7 @@ final class LibraryStore: ObservableObject {
             await reload()
             return result.wasKeptInLibrary ? "已从你的书单移除（库中仍有其他用户）" : nil
         } catch {
-            return (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            return Self.apiError(from: error).errorDescription ?? "删除失败"
         }
     }
 
@@ -123,8 +147,7 @@ final class LibraryStore: ObservableObject {
             await reload()
             return nil
         } catch {
-            return (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            return Self.apiError(from: error).errorDescription ?? "清除记录失败"
         }
     }
 }
