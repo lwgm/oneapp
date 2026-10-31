@@ -17,7 +17,16 @@ struct ScannerView: View {
     @State private var showsDiscardConfirm = false
 
     @State private var scanned: [String] = []
-    @State private var lastAdded: String?
+
+    /// 取景框下方的提示位。三个状态互斥，且都只在有限时间内显示。
+    @State private var hint: Hint = .instruction
+    @State private var hintToken = UUID()
+
+    private enum Hint: Equatable {
+        case instruction
+        case added(String)
+        case rejected(ISBNValidator.RejectionDetail)
+    }
 
     private enum ActiveSheet: Identifiable {
         case manualInput
@@ -186,28 +195,73 @@ struct ScannerView: View {
 
     // MARK: - 提示区
 
-    @ViewBuilder
+    /// 三种状态高度不同，用固定高度容器兜住，避免取景框随提示上下移动。
     private var hintArea: some View {
-        if let lastAdded, scanned.contains(lastAdded) {
-            HStack(spacing: 7) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 13))
-                Text(lastAdded)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                Text("已加入")
-                    .font(.system(size: 12))
-                    .opacity(0.72)
+        ZStack {
+            switch hint {
+            case .instruction:
+                Text("将书籍背面的条形码置于框内")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .transition(.opacity)
+
+            case .added(let isbn):
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13))
+                    Text(isbn)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    Text("已加入")
+                        .font(.system(size: 12))
+                        .opacity(0.72)
+                }
+                .foregroundStyle(Color(red: 0.60, green: 0.95, blue: 0.78))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(.black.opacity(0.42), in: Capsule())
+                .transition(.opacity.combined(with: .scale(scale: 0.94)))
+
+            case .rejected(let detail):
+                VStack(spacing: 3) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                        Text(Self.message(for: detail.reason))
+                            .font(.system(size: 12.5, weight: .medium))
+                    }
+                    Text(Self.shortened(detail.raw))
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .opacity(0.6)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Color(red: 1.0, green: 0.82, blue: 0.45))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(
+                    .black.opacity(0.5),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
-            .foregroundStyle(Color(red: 0.60, green: 0.95, blue: 0.78))
-            .padding(.horizontal, 13)
-            .padding(.vertical, 7)
-            .background(.black.opacity(0.42), in: Capsule())
-            .transition(.opacity.combined(with: .scale(scale: 0.94)))
-        } else {
-            Text("将书籍背面的条形码置于框内")
-                .font(.system(size: 13.5))
-                .foregroundStyle(.white.opacity(0.78))
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 54)
+    }
+
+    private static func message(for reason: ISBNValidator.Rejection) -> String {
+        switch reason {
+        case .notNumeric, .wrongLength:
+            return "这不是书籍条码"
+        case .notBookPrefix:
+            return "这是商品条码，不是书籍"
+        case .failedCheckDigit:
+            return "条码没读全，请再对准一次"
+        }
+    }
+
+    private static func shortened(_ raw: String) -> String {
+        let limit = 26
+        return raw.count <= limit ? raw : String(raw.prefix(limit)) + "…"
     }
 
     // MARK: - 底部操作
@@ -275,8 +329,13 @@ struct ScannerView: View {
     // MARK: - 逻辑
 
     private func handleAppear() {
-        camera.onCodeDetected = { isbn in
-            add(isbn)
+        camera.onScan = { outcome in
+            switch outcome {
+            case .accepted(let isbn):
+                add(isbn)
+            case .rejected(let detail):
+                showHint(.rejected(detail), for: 2.4)
+            }
         }
 
         authorization = AVCaptureDevice.authorizationStatus(for: .video)
@@ -289,16 +348,30 @@ struct ScannerView: View {
         // 同一本书重复扫到不重复添加，只刷新提示。
         if scanned.contains(isbn) {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
-            withAnimation(.easeOut(duration: 0.18)) {
-                lastAdded = isbn
-            }
+            showHint(.added(isbn), for: 2.2)
             return
         }
 
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        scanned.append(isbn)
+        showHint(.added(isbn), for: 2.2)
+    }
+
+    /// 提示只在有限时间内显示，之后自动回到引导文案。
+    /// 这样「已加入」不会永久占据提示位，警告也不会赖在屏幕上。
+    private func showHint(_ newHint: Hint, for seconds: Double) {
+        let token = UUID()
         withAnimation(.easeOut(duration: 0.18)) {
-            scanned.append(isbn)
-            lastAdded = isbn
+            hint = newHint
+            hintToken = token
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard hintToken == token else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                hint = .instruction
+            }
         }
     }
 

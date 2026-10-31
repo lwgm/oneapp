@@ -8,23 +8,28 @@ final class CameraSession: NSObject, ObservableObject {
     @Published private(set) var isTorchAvailable = false
     @Published private(set) var errorMessage: String?
 
-    /// 识别到合法 ISBN 时回调。同一本书持续在画面里时不会反复触发，
-    /// 但离开画面后再扫同一本可以再次识别。
-    var onCodeDetected: ((String) -> Void)?
+    /// 一次识别结果：可能是合法 ISBN，也可能是被拒的条码。
+    /// 被拒时同样会回调，好让界面告诉用户「读到了东西，但不是书」。
+    var onScan: ((ISBNValidator.Outcome) -> Void)?
 
     private let sessionQueue = DispatchQueue(label: "com.lwgm.oneapp.camera.session")
     private var isConfigured = false
     private var videoDevice: AVCaptureDevice?
     private var metadataOutput: AVCaptureMetadataOutput?
 
-    /// 去抖：记录上次识别到的书和时刻，避免同一个条码在画面里被连续重复上报。
-    private var lastDetectedCode: String?
-    private var lastDetectedAt = Date.distantPast
-    private let reDetectionInterval: TimeInterval = 2.5
+    /// 稳定过滤：条码要在画面里连续停留这么久才算「用户对着它」。
+    /// 扫书架时隔壁书的条码快速掠过不会触发提示。
+    private var candidateValue: String?
+    private var candidateSince = Date.distantPast
+    private let candidateHoldInterval: TimeInterval = 0.30
+
+    /// 同一个读数在这段时间内不重复上报。
+    private var lastEmittedValue: String?
+    private var lastEmittedAt = Date.distantPast
+    private let reEmitInterval: TimeInterval = 2.5
 
     func start() {
-        lastDetectedCode = nil
-        lastDetectedAt = .distantPast
+        resetDetectionState()
 
         sessionQueue.async { [weak self] in
             guard let self else { return }
@@ -136,22 +141,40 @@ extension CameraSession: AVCaptureMetadataOutputObjectsDelegate {
         didOutput metadataObjects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
-        for object in metadataObjects {
-            guard
-                let code = object as? AVMetadataMachineReadableCodeObject,
-                let value = code.stringValue,
-                let isbn = ISBNValidator.normalized(value)
-            else { continue }
+        guard
+            let object = metadataObjects.first(where: {
+                $0 is AVMetadataMachineReadableCodeObject
+            }) as? AVMetadataMachineReadableCodeObject,
+            let value = object.stringValue,
+            !value.isEmpty
+        else { return }
 
-            let now = Date()
-            let isRepeat = (isbn == lastDetectedCode)
-                && now.timeIntervalSince(lastDetectedAt) < reDetectionInterval
-            guard !isRepeat else { return }
+        let now = Date()
 
-            lastDetectedCode = isbn
-            lastDetectedAt = now
-            onCodeDetected?(isbn)
+        // 读数一变就重置计时，交替出现的两个码永远不会「稳定」。
+        if value != candidateValue {
+            candidateValue = value
+            candidateSince = now
+        }
+        guard now.timeIntervalSince(candidateSince) >= candidateHoldInterval else {
             return
         }
+
+        if value == lastEmittedValue, now.timeIntervalSince(lastEmittedAt) < reEmitInterval {
+            return
+        }
+        lastEmittedValue = value
+        lastEmittedAt = now
+
+        onScan?(ISBNValidator.classify(value))
+    }
+}
+
+extension CameraSession {
+    private func resetDetectionState() {
+        candidateValue = nil
+        candidateSince = .distantPast
+        lastEmittedValue = nil
+        lastEmittedAt = .distantPast
     }
 }
