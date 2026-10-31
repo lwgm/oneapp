@@ -7,8 +7,6 @@ struct LibraryView: View {
     @State private var searchText = ""
     /// 搜索框是否聚焦。用于「输入时让出底部空间」和「点空白处收起键盘」。
     @FocusState private var isSearchFocused: Bool
-    /// 搜索框在屏幕中的位置。放进引用类型，避免滚动时触发视图更新。
-    @State private var tapExclusion = TapExclusionBox()
     @State private var isScannerPresented = false
     @State private var path = NavigationPath()
     @State private var activeSheet: ActiveSheet?
@@ -35,6 +33,10 @@ struct LibraryView: View {
         case book(Book)
         case settings
     }
+
+    /// 底部为扫描按钮预留的高度：54（按钮）+ 16（上边距）+ 6（下边距）。
+    /// 焦点变化时这个值必须保持不变，否则键盘避让之外又多一层内边距变化。
+    private static let scanButtonInsetHeight: CGFloat = 76
 
     private var filteredBooks: [Book] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,11 +67,18 @@ struct LibraryView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                // 只占位，且高度与焦点无关。
+                // 按钮本身挪到了下面的 overlay：只要按钮还挂在 safeAreaInset 里，
+                // 它的大小/位移就参与 List 底部内边距的计算，焦点一变内边距跟着变，
+                // List 会重新锚定内容，看起来就是「跳一下、往上翻了些」。
                 .safeAreaInset(edge: .bottom) {
                     if settings.isConfigured {
-                        // 始终留在层级里，只改透明度和位移。
-                        // 之前用 if 增删整块 inset，会让 List 的底部内边距变化，
-                        // 与键盘上滑的布局动画叠在一起，看起来就是掉帧。
+                        Color.clear
+                            .frame(height: Self.scanButtonInsetHeight)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if settings.isConfigured {
                         scanButton
                             .opacity(isSearchFocused ? 0 : 1)
                             .offset(y: isSearchFocused ? 64 : 0)
@@ -79,10 +88,12 @@ struct LibraryView: View {
                 }
                 .background {
                     // 覆盖导航栏与标题区域的点击收键盘。
-                    DismissKeyboardOnTapOutside(
-                        onTapOutside: { isSearchFocused = false },
-                        exclusion: tapExclusion
-                    )
+                    DismissKeyboardOnTapOutside(onTapOutside: {
+                        // true 表示焦点已在这里清掉，外层不必再强制 resign（单通道）。
+                        guard isSearchFocused else { return false }
+                        isSearchFocused = false
+                        return true
+                    })
                 }
                 .navigationDestination(for: Route.self) { route in
                     switch route {
@@ -331,6 +342,11 @@ struct LibraryView: View {
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
+                    // 点 × 只清内容，不该顺带收键盘。外层 window 手势会在同一次
+                    // 点击里清掉焦点，这里抢回来：先同步一次尽量不让键盘开始下落，
+                    // 再延后一拍兜住手势先触发的时序。
+                    isSearchFocused = true
+                    DispatchQueue.main.async { isSearchFocused = true }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
@@ -345,16 +361,6 @@ struct LibraryView: View {
             Color.ink.opacity(0.062),
             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
-        // 记录屏幕坐标，供窗口级手势排除。写入引用类型，不触发重绘。
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { tapExclusion.rect = proxy.frame(in: .global) }
-                    .onChange(of: proxy.frame(in: .global)) { _, newValue in
-                        tapExclusion.rect = newValue
-                    }
-            }
-        }
     }
 
     private var scanButton: some View {
