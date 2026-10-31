@@ -5,6 +5,8 @@ struct LibraryView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var searchText = ""
+    /// 搜索框是否聚焦。用于「输入时让出底部空间」和「点空白处收起键盘」。
+    @FocusState private var isSearchFocused: Bool
     @State private var isScannerPresented = false
     @State private var path = NavigationPath()
     @State private var activeSheet: ActiveSheet?
@@ -62,10 +64,12 @@ struct LibraryView: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    if settings.isConfigured {
+                    if settings.isConfigured && !isSearchFocused {
                         scanButton
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .animation(.easeInOut(duration: 0.2), value: isSearchFocused)
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .book(let book):
@@ -269,6 +273,13 @@ struct LibraryView: View {
         .scrollContentBackground(.hidden)
         .background(Color.paper)
         .scrollDismissesKeyboard(.interactively)
+        // 点空白处收起键盘。用 simultaneousGesture 是为了不抢走行按钮的点击：
+        // 点某一行会同时收键盘并进入详情，符合直觉。
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if isSearchFocused { isSearchFocused = false }
+            }
+        )
         .refreshable { await store.refresh() }
     }
 
@@ -306,10 +317,17 @@ struct LibraryView: View {
                 .font(.system(size: 14.5))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+                .onSubmit { isSearchFocused = false }
 
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
+                    // 清空后继续输入是常见操作，所以把焦点抢回来。
+                    // 外层 List 的"点空白收键盘"手势也在同一次点击里触发，
+                    // 这里延后一拍重新聚焦即可抵消。
+                    DispatchQueue.main.async { isSearchFocused = true }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
