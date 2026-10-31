@@ -21,7 +21,7 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: 书扫
+        CFBundleDisplayName: 扫书
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}

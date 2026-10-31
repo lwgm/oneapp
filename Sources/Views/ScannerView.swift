@@ -334,6 +334,8 @@ struct ScannerView: View {
             case .accepted(let isbn):
                 add(isbn)
             case .rejected(let detail):
+                // 拒绝只在上报时触发一次（相机层已做去重），所以这里可以放心震动。
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 showHint(.rejected(detail), for: 2.4)
             }
         }

@@ -109,7 +109,7 @@ struct CameraBlockedView: View {
                     .foregroundStyle(.white)
                     .padding(.bottom, 14)
 
-                Text("需要相机权限才能扫描条形码。\n请在系统设置中允许「书扫」使用相机。")
+                Text("需要相机权限才能扫描条形码。\n请在系统设置中允许「扫书」使用相机。")
                     .font(.system(size: 13.5))
                     .foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)

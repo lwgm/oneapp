@@ -21,7 +21,12 @@ final class CameraSession: NSObject, ObservableObject {
     /// 扫书架时隔壁书的条码快速掠过不会触发提示。
     private var candidateValue: String?
     private var candidateSince = Date.distantPast
+    /// 当前这个读数是否已经上报过。用于「拒绝只报一次」。
+    private var hasEmittedCandidate = false
+    /// 上一次看到任意条码的时刻。间隔够久就认为用户已经离开，重新允许提示。
+    private var lastSeenAt = Date.distantPast
     private let candidateHoldInterval: TimeInterval = 0.30
+    private let presenceGap: TimeInterval = 1.0
 
     /// 同一个读数在这段时间内不重复上报。
     private var lastEmittedValue: String?
@@ -151,22 +156,41 @@ extension CameraSession: AVCaptureMetadataOutputObjectsDelegate {
 
         let now = Date()
 
-        // 读数一变就重置计时，交替出现的两个码永远不会「稳定」。
-        if value != candidateValue {
+        // 距离上次看到条码超过 1 秒，视为用户已经离开（比如把手机移开了）。
+        // 这样对着同一件商品移开再对准，可以再提示一次。
+        let isNewPresence = now.timeIntervalSince(lastSeenAt) > presenceGap
+        lastSeenAt = now
+
+        // 读数一变就重置，交替出现的两个码永远不会「稳定」。
+        if value != candidateValue || isNewPresence {
             candidateValue = value
             candidateSince = now
+            hasEmittedCandidate = false
         }
         guard now.timeIntervalSince(candidateSince) >= candidateHoldInterval else {
             return
         }
 
-        if value == lastEmittedValue, now.timeIntervalSince(lastEmittedAt) < reEmitInterval {
-            return
-        }
-        lastEmittedValue = value
-        lastEmittedAt = now
+        let outcome = ISBNValidator.classify(value)
 
-        onScan?(ISBNValidator.classify(value))
+        switch outcome {
+        case .accepted:
+            // 成功路径允许重复扫同一本书，所以按冷却时间放行。
+            if value == lastEmittedValue,
+               now.timeIntervalSince(lastEmittedAt) < reEmitInterval {
+                return
+            }
+            lastEmittedValue = value
+            lastEmittedAt = now
+
+        case .rejected:
+            // 拒绝只需要说一次：没人要被反复告知「这盒牛奶不是书」。
+            // 离开画面或换成别的码之后才会重新允许提示。
+            guard !hasEmittedCandidate else { return }
+        }
+
+        hasEmittedCandidate = true
+        onScan?(outcome)
     }
 }
 
@@ -174,6 +198,8 @@ extension CameraSession {
     private func resetDetectionState() {
         candidateValue = nil
         candidateSince = .distantPast
+        hasEmittedCandidate = false
+        lastSeenAt = .distantPast
         lastEmittedValue = nil
         lastEmittedAt = .distantPast
     }
