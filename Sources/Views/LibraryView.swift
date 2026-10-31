@@ -7,6 +7,8 @@ struct LibraryView: View {
     @State private var searchText = ""
     /// 搜索框是否聚焦。用于「输入时让出底部空间」和「点空白处收起键盘」。
     @FocusState private var isSearchFocused: Bool
+    /// 搜索框在屏幕中的位置。放进引用类型，避免滚动时触发视图更新。
+    @State private var tapExclusion = TapExclusionBox()
     @State private var isScannerPresented = false
     @State private var path = NavigationPath()
     @State private var activeSheet: ActiveSheet?
@@ -64,12 +66,24 @@ struct LibraryView: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    if settings.isConfigured && !isSearchFocused {
+                    if settings.isConfigured {
+                        // 始终留在层级里，只改透明度和位移。
+                        // 之前用 if 增删整块 inset，会让 List 的底部内边距变化，
+                        // 与键盘上滑的布局动画叠在一起，看起来就是掉帧。
                         scanButton
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .opacity(isSearchFocused ? 0 : 1)
+                            .offset(y: isSearchFocused ? 64 : 0)
+                            .allowsHitTesting(!isSearchFocused)
+                            .animation(.easeOut(duration: 0.18), value: isSearchFocused)
                     }
                 }
-                .animation(.easeInOut(duration: 0.2), value: isSearchFocused)
+                .background {
+                    // 覆盖导航栏与标题区域的点击收键盘。
+                    DismissKeyboardOnTapOutside(
+                        onTapOutside: { isSearchFocused = false },
+                        exclusion: tapExclusion
+                    )
+                }
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .book(let book):
@@ -273,13 +287,6 @@ struct LibraryView: View {
         .scrollContentBackground(.hidden)
         .background(Color.paper)
         .scrollDismissesKeyboard(.interactively)
-        // 点空白处收起键盘。用 simultaneousGesture 是为了不抢走行按钮的点击：
-        // 点某一行会同时收键盘并进入详情，符合直觉。
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                if isSearchFocused { isSearchFocused = false }
-            }
-        )
         .refreshable { await store.refresh() }
     }
 
@@ -324,10 +331,6 @@ struct LibraryView: View {
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
-                    // 清空后继续输入是常见操作，所以把焦点抢回来。
-                    // 外层 List 的"点空白收键盘"手势也在同一次点击里触发，
-                    // 这里延后一拍重新聚焦即可抵消。
-                    DispatchQueue.main.async { isSearchFocused = true }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
@@ -342,6 +345,16 @@ struct LibraryView: View {
             Color.ink.opacity(0.062),
             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
         )
+        // 记录屏幕坐标，供窗口级手势排除。写入引用类型，不触发重绘。
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { tapExclusion.rect = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { _, newValue in
+                        tapExclusion.rect = newValue
+                    }
+            }
+        }
     }
 
     private var scanButton: some View {
