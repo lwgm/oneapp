@@ -58,6 +58,9 @@ struct LibraryView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
+                            // 进详情/设置前先清掉焦点，否则返回时 TextField 重新挂载
+                            // 会按旧的焦点状态把键盘又弹出来。
+                            isSearchFocused = false
                             path.append(Route.settings)
                         } label: {
                             Image(systemName: "gearshape")
@@ -86,15 +89,6 @@ struct LibraryView: View {
                             .animation(.easeOut(duration: 0.18), value: isSearchFocused)
                     }
                 }
-                .background {
-                    // 覆盖导航栏与标题区域的点击收键盘。
-                    DismissKeyboardOnTapOutside(onTapOutside: {
-                        // true 表示焦点已在这里清掉，外层不必再强制 resign（单通道）。
-                        guard isSearchFocused else { return false }
-                        isSearchFocused = false
-                        return true
-                    })
-                }
                 .navigationDestination(for: Route.self) { route in
                     switch route {
                     case .book(let book):
@@ -108,6 +102,9 @@ struct LibraryView: View {
         }
         .tint(Color.ink)
         .task { await store.loadInitialIfNeeded() }
+        // 任何导航都会让列表重新出现，这里兜底清焦点：
+        // 从详情/设置返回时，TextField 重新挂载不该按旧状态自动弹出键盘。
+        .onChange(of: path) { _, _ in isSearchFocused = false }
         .onChange(of: settings.serverAddress) { _, _ in reloadAfterSettingsChange() }
         .onChange(of: settings.username) { _, _ in reloadAfterSettingsChange() }
         .fullScreenCover(isPresented: $isScannerPresented) {
@@ -234,6 +231,11 @@ struct LibraryView: View {
                 }
             }
             .refreshable { await store.refresh() }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    if isSearchFocused { isSearchFocused = false }
+                }
+            )
         } else {
             bookList
         }
@@ -255,6 +257,7 @@ struct LibraryView: View {
 
             ForEach(Array(filteredBooks.enumerated()), id: \.element.id) { index, book in
                 Button {
+                    isSearchFocused = false
                     path.append(Route.book(book))
                 } label: {
                     BookRowView(
@@ -297,7 +300,17 @@ struct LibraryView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.paper)
-        .scrollDismissesKeyboard(.interactively)
+        // 拖动列表立刻收键盘（不再跟手半途停住）。
+        .scrollDismissesKeyboard(.immediately)
+        // 点列表任意空白处收键盘。用 simultaneousGesture 是为了不抢走
+        // 行按钮的点击：点某一行会「收键盘 + 进详情」同时发生。
+        // 标题与导航栏区域属于 UIKit，SwiftUI 手势收不到，那里由搜索框旁的
+        // 「取消」按钮兜底。
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if isSearchFocused { isSearchFocused = false }
+            }
+        )
         .refreshable { await store.refresh() }
     }
 
@@ -326,41 +339,59 @@ struct LibraryView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.sub.opacity(0.75))
+        HStack(spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.sub.opacity(0.75))
 
-            TextField("搜索书名、作者或 ISBN", text: $searchText)
-                .font(.system(size: 14.5))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($isSearchFocused)
-                .submitLabel(.search)
-                .onSubmit { isSearchFocused = false }
+                TextField("搜索书名、作者或 ISBN", text: $searchText)
+                    .font(.system(size: 14.5))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isSearchFocused)
+                    .submitLabel(.search)
+                    .onSubmit { isSearchFocused = false }
 
-            if !searchText.isEmpty {
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        // 点 × 只清内容，不该顺带收键盘。外层的列表点击手势会在
+                        // 同一次点击里清焦点，这里抢回来。
+                        isSearchFocused = true
+                        DispatchQueue.main.async { isSearchFocused = true }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.sub.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 40)
+            .background(
+                Color.ink.opacity(0.062),
+                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+            )
+
+            // 标题与导航栏区域的点击 SwiftUI 收不到，需要一个显式的出口。
+            // 这也符合「搜索时给一个取消」的通用习惯。
+            if isSearchFocused || !searchText.isEmpty {
                 Button {
                     searchText = ""
-                    // 点 × 只清内容，不该顺带收键盘。外层 window 手势会在同一次
-                    // 点击里清掉焦点，这里抢回来：先同步一次尽量不让键盘开始下落，
-                    // 再延后一拍兜住手势先触发的时序。
-                    isSearchFocused = true
-                    DispatchQueue.main.async { isSearchFocused = true }
+                    isSearchFocused = false
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.sub.opacity(0.4))
+                    Text("取消")
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(Color.accentColor)
                 }
                 .buttonStyle(.plain)
+                .transition(.opacity)
             }
         }
-        .padding(.horizontal, 11)
-        .frame(height: 40)
-        .background(
-            Color.ink.opacity(0.062),
-            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-        )
+        .animation(.easeOut(duration: 0.15), value: isSearchFocused)
+        .animation(.easeOut(duration: 0.15), value: searchText.isEmpty)
     }
 
     private var scanButton: some View {
