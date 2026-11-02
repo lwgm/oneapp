@@ -27,7 +27,6 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UIUserInterfaceStyle: Light
         NSCameraUsageDescription: 用于识别书籍背面的条形码，画面只在本机处理，不会上传。
         ITSAppUsesNonExemptEncryption: false
     settings:

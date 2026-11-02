@@ -37,7 +37,7 @@ struct ManualInputView: View {
                         .padding(.horizontal, 14)
                         .frame(height: 50)
                         .background(
-                            Color.white,
+                            Color.card,
                             in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                         )
                         .overlay(
@@ -52,7 +52,7 @@ struct ManualInputView: View {
                     } label: {
                         Text("上传")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.primaryLabel)
                             .padding(.horizontal, 22)
                             .frame(height: 50)
                             .background(
@@ -71,7 +71,7 @@ struct ManualInputView: View {
             }
             .padding(.horizontal, 22)
             .padding(.top, 24)
-            .background(Color(red: 0.969, green: 0.969, blue: 0.976).ignoresSafeArea())
+            .background(Color.grouped.ignoresSafeArea())
             .navigationTitle("手动输入 ISBN")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -89,7 +89,7 @@ struct ManualInputView: View {
     private var borderColor: Color {
         if validated != nil { return Color.ink.opacity(0.14) }
         if text.isEmpty { return Color.ink.opacity(0.14) }
-        return Color(red: 0.75, green: 0.22, blue: 0.17).opacity(0.55)
+        return Color.danger.opacity(0.55)
     }
 
     @ViewBuilder
@@ -101,7 +101,7 @@ struct ManualInputView: View {
                 Text("将上传 \(isbn)")
                     .font(.system(size: 12))
             }
-            .foregroundStyle(Color(red: 0.141, green: 0.353, blue: 0.325))
+            .foregroundStyle(Color.success)
         } else if text.isEmpty {
             Text("支持 ISBN-10（10 位）与 ISBN-13（13 位），自动忽略连字符")
                 .font(.system(size: 12))
@@ -109,11 +109,11 @@ struct ManualInputView: View {
         } else if isTooLong {
             Text("位数超出，ISBN 最长 13 位")
                 .font(.system(size: 12))
-                .foregroundStyle(Color(red: 0.75, green: 0.22, blue: 0.17))
+                .foregroundStyle(Color.danger)
         } else {
             Text("还不能上传：位数或校验位不对，请核对书背面的号码")
                 .font(.system(size: 12))
-                .foregroundStyle(Color(red: 0.75, green: 0.22, blue: 0.17))
+                .foregroundStyle(Color.danger)
         }
     }
 }

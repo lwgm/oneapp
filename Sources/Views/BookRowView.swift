@@ -88,12 +88,12 @@ struct BookRowView: View {
 
     private var statusColor: Color {
         if book.status.isFailure {
-            return Color(red: 0.75, green: 0.22, blue: 0.17)
+            return Color.danger
         }
         if book.status.isSuccess || book.status == .duplicate {
-            return Color(red: 0.141, green: 0.353, blue: 0.325)
+            return Color.success
         }
-        return Color(red: 0.70, green: 0.47, blue: 0.09)
+        return Color.caution
     }
 
     var body: some View {

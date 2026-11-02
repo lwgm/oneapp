@@ -327,11 +327,11 @@ struct LibraryView: View {
             }
             .font(.system(size: 12.5, weight: .semibold))
         }
-        .foregroundStyle(Color(red: 0.62, green: 0.24, blue: 0.19))
+        .foregroundStyle(Color.danger)
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(
-            Color(red: 0.75, green: 0.22, blue: 0.17).opacity(0.08),
+            Color.danger.opacity(0.12),
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .padding(.horizontal, 16)
@@ -371,7 +371,7 @@ struct LibraryView: View {
             .padding(.horizontal, 11)
             .frame(height: 40)
             .background(
-                Color.ink.opacity(0.062),
+                Color.field,
                 in: RoundedRectangle(cornerRadius: 11, style: .continuous)
             )
 
@@ -404,11 +404,11 @@ struct LibraryView: View {
                 Text("扫描一本书")
                     .font(.system(size: 16, weight: .semibold))
             }
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Color.primaryLabel)
             .frame(maxWidth: .infinity)
             .frame(height: 54)
             .background(
-                Color.ink,
+                Color.primaryFill,
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
             .shadow(color: .black.opacity(0.24), radius: 16, x: 0, y: 10)
@@ -484,11 +484,11 @@ struct SetupPromptView: View {
             Button(action: onOpenSettings) {
                 Text("去设置")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.primaryLabel)
                     .padding(.horizontal, 34)
                     .frame(height: 46)
                     .background(
-                        Color.ink,
+                        Color.primaryFill,
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
             }
@@ -537,11 +537,11 @@ struct LibraryErrorView: View {
             } label: {
                 Text(error.suggestsSettings ? "去设置" : "重试")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.primaryLabel)
                     .padding(.horizontal, 34)
                     .frame(height: 46)
                     .background(
-                        Color.ink,
+                        Color.primaryFill,
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
             }
@@ -569,10 +569,10 @@ struct BookStack: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.field)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(Color.ink.opacity(0.1), lineWidth: 1)
+                        .stroke(Color.ink.opacity(0.12), lineWidth: 1)
                 )
                 .frame(width: 62, height: 84)
                 .rotationEffect(.degrees(-10))
@@ -580,16 +580,15 @@ struct BookStack: View {
                 .opacity(0.5)
 
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.field)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(Color.ink.opacity(0.1), lineWidth: 1)
+                        .stroke(Color.ink.opacity(0.12), lineWidth: 1)
                 )
                 .frame(width: 62, height: 84)
                 .rotationEffect(.degrees(9))
                 .offset(x: 19, y: 6)
                 .opacity(0.72)
-
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(CoverPalette.gradient(for: "书"))
                 .frame(width: 64, height: 92)

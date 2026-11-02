@@ -225,9 +225,9 @@ struct BatchUploadView: View {
 
     private func statusColor(_ state: Item.ItemState) -> Color {
         switch state {
-        case .uploaded, .duplicate: return Color(red: 0.141, green: 0.353, blue: 0.325)
-        case .timedOut: return Color(red: 0.70, green: 0.47, blue: 0.09)
-        case .failed: return Color(red: 0.75, green: 0.22, blue: 0.17)
+        case .uploaded, .duplicate: return Color.success
+        case .timedOut: return Color.caution
+        case .failed: return Color.danger
         default: return Color.sub
         }
     }
@@ -256,11 +256,11 @@ struct BatchUploadView: View {
                 } label: {
                     Text("完成")
                         .font(.system(size: 15.5, weight: .semibold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.primaryLabel)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(
-                            Color.ink,
+                            Color.primaryFill,
                             in: RoundedRectangle(cornerRadius: 15, style: .continuous)
                         )
                 }
@@ -295,11 +295,11 @@ struct BatchUploadView: View {
                         Text("开始上传 \(items.count) 本")
                             .font(.system(size: 15.5, weight: .semibold))
                     }
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.primaryLabel)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
                     .background(
-                        Color.ink,
+                        Color.primaryFill,
                         in: RoundedRectangle(cornerRadius: 15, style: .continuous)
                     )
                 }

@@ -14,12 +14,12 @@ struct BookDetailView: View {
 
     private var statusColor: Color {
         if book.status.isFailure {
-            return Color(red: 0.75, green: 0.22, blue: 0.17)
+            return Color.danger
         }
         if book.status.isSuccess || book.status == .duplicate {
-            return Color(red: 0.141, green: 0.353, blue: 0.325)
+            return Color.success
         }
-        return Color(red: 0.70, green: 0.47, blue: 0.09)
+        return Color.caution
     }
 
     private var rows: [(String, String, Bool)] {
@@ -63,7 +63,7 @@ struct BookDetailView: View {
                     noticeCard(
                         title: "书籍信息不完整",
                         body: "后端只返回了 ISBN，没有书名和作者。等抓取成功后重新加载即可显示完整信息。",
-                        color: Color(red: 0.70, green: 0.47, blue: 0.09)
+                        color: Color.caution
                     )
                 } else if !book.hasBlurb {
                     noticeCard(
@@ -106,11 +106,11 @@ struct BookDetailView: View {
                     Text("重试上传")
                         .font(.system(size: 15.5, weight: .semibold))
                 }
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.primaryLabel)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(
-                    Color.ink,
+                    Color.primaryFill,
                     in: RoundedRectangle(cornerRadius: 15, style: .continuous)
                 )
             }
@@ -145,7 +145,7 @@ struct BookDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(text)
                 .font(.system(size: 14))
-                .foregroundStyle(Color(red: 0.2, green: 0.211, blue: 0.235))
+                .foregroundStyle(Color.body)
                 .lineSpacing(6)
                 .lineLimit(isBlurbExpanded ? nil : 6)
 
@@ -165,7 +165,7 @@ struct BookDetailView: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Color.white,
+            Color.card,
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .overlay(
@@ -230,7 +230,7 @@ struct BookDetailView: View {
         }
         .padding(.horizontal, 16)
         .background(
-            Color.white,
+            Color.card,
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .overlay(
